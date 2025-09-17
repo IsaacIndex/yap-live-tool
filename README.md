@@ -5,7 +5,7 @@
 ## Features
 - Segment-based microphone capture via `ffmpeg` with rolling window display in the terminal
 - Live captions using `yap transcribe` with configurable source locale
-- Optional streaming translation into another language using Ollama with batched prompts and live queue status
+- Optional streaming translation into another language using Ollama with direct CLI prompts and live queue status
 - Timestamped log files saved under `logs/` for later review
 - Sensible defaults but tunable knobs for device selection, segment length, and display window size
 
@@ -42,17 +42,15 @@ Usage: ./live_yap.sh [-d DEVICE] [-s SOURCE_LOCALE] [-t TARGET_LANG] [-n SEG_SEC
 
 - `-d DEVICE` — audio device identifier passed to `ffmpeg -f avfoundation`; defaults to `:0` (macOS default input). Use the list command above to discover device IDs.
 - `-s SOURCE_LOCALE` — locale Yap should transcribe (e.g. `en-US`, `es-ES`, `ja-JP`). This flag is required when you want meaningful results.
-- `-t TARGET_LANG` — ISO language code for translation. When set, transcriptions are queued and translated asynchronously in small batches through `ollama run $TRANSLATION_MODEL` (default `llama3.1:8b`). The live window shows the source caption immediately with a pending marker and updates again when the translated line arrives. You can override the model with `TRANSLATION_MODEL`, the batch size with `TRANSLATION_BATCH`, and the idle flush window (seconds) with `TRANSLATION_FLUSH_SECS`. If translation fails, the script falls back to the raw transcription and records the error details.
+- `-t TARGET_LANG` — ISO language code for translation. When set, each transcription is queued and translated asynchronously via a direct `ollama run $TRANSLATION_MODEL` call (default `llama3.1:8b`). The live window shows the source caption immediately with a pending marker and updates again when the translated line arrives. You can override the model with `TRANSLATION_MODEL`. If translation fails, the script falls back to the raw transcription and records the error details.
 - `-n SEG_SECONDS` — length of each recorded chunk in seconds (default `2`). Shorter chunks reduce latency, longer chunks can improve accuracy.
 - `-w WINDOW` — how many recent lines to keep visible in the terminal (default `3`).
 
 To change the built-in defaults (log directory, model name, chunk length, etc.), edit the variable assignments near the top of `live_yap.sh`.
 
-When translation is enabled you can also tweak the asynchronous batching behaviour with environment variables:
+When translation is enabled you can control the Ollama model with an environment variable:
 
 - `TRANSLATION_MODEL` — Ollama model to use (default `llama3.1:8b`).
-- `TRANSLATION_BATCH` — number of transcriptions sent per Ollama prompt (default `3`).
-- `TRANSLATION_FLUSH_SECS` — idle seconds before flushing a partial batch (default `1.0`).
 - Translation errors for each session are captured in `logs/yap_live_YYYYMMDD_HHMMSS_errors.log` when translation is enabled.
 
 ## Tips & Troubleshooting
