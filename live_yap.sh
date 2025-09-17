@@ -4,6 +4,9 @@ set -euo pipefail
 # Harden PATH (helps when launched from environments with minimal PATH)
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
+
 DEVICE=":0"
 SOURCE_LOCALE="en-US"
 TARGET_LANG=""
@@ -11,7 +14,7 @@ SEG_SECONDS=2
 WINDOW=3
 MODEL="mlx-community/Llama-3.2-1B-Instruct-4bit"
 CHUNK_DIR="/tmp/yapchunks-$$"
-LOG_FILE="yap_live_$(date +%Y%m%d_%H%M%S).log"
+LOG_FILE="$LOG_DIR/yap_live_$(date +%Y%m%d_%H%M%S).log"
 
 usage() {
   cat <<EOF
@@ -55,7 +58,7 @@ PY
 "$s"
 }
 
-mkdir -p "$CHUNK_DIR"
+mkdir -p "$CHUNK_DIR" "$LOG_DIR"
 
 cleanup() {
   local ec=$?
@@ -102,12 +105,18 @@ while IFS= read -r -d "" path; do
   [[ "$path" == *.wav ]] || continue
   msleep 0.05
 
-  RAW_TEXT="$(yap transcribe "$path" --locale "$SOURCE_LOCALE" 2>/dev/null \
-    | tr -d '\0' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  if ! RAW_TEXT="$(yap transcribe "$path" --locale "$SOURCE_LOCALE" 2>/dev/null \
+    | tr -d '\0' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; then
+    # Skip chunks that fail to transcribe; avoid tearing down the session under set -e.
+    continue
+  fi
   [[ -z "$RAW_TEXT" ]] && continue
 
   if [[ -n "$TARGET_LANG" ]]; then
-    OUT_TEXT="$(printf '%s' "$RAW_TEXT" | uvx llm -m "$MODEL" -q "Translate to ${TARGET_LANG}:")"
+    if ! OUT_TEXT="$(printf '%s' "$RAW_TEXT" | uvx llm -m "$MODEL" -q "Translate to ${TARGET_LANG}:")"; then
+      # Fall back to raw transcription if translation fails mid-stream.
+      OUT_TEXT="$RAW_TEXT"
+    fi
   else
     OUT_TEXT="$RAW_TEXT"
   fi
