@@ -5,7 +5,7 @@
 ## Features
 - Segment-based microphone capture via `ffmpeg` with rolling window display in the terminal
 - Live captions using `yap transcribe` with configurable source locale
-- Optional streaming translation into another language using `uvx llm` and a local model
+- Optional streaming translation into another language using Ollama with batched prompts and live queue status
 - Timestamped log files saved under `logs/` for later review
 - Sensible defaults but tunable knobs for device selection, segment length, and display window size
 
@@ -17,7 +17,7 @@ Make sure the following command-line tools are available in your shell `PATH`:
 | [`ffmpeg`](https://ffmpeg.org/download.html) | records audio chunks from the microphone | `brew install ffmpeg`
 | [`fswatch`](https://emcrisostomo.github.io/fswatch/) | watches the chunk directory for new files | `brew install fswatch`
 | [`yap`](https://github.com/yorchmendes/yap) | provides the `transcribe` command used for captions | follow the Yap project instructions (e.g. `pip install yap`) |
-| [`uvx`](https://docs.astral.sh/uv/) & [`llm`](https://llm.datasette.io) *(optional)* | only required when `-t/--target` is used for translation | `curl -LsSf https://astral.sh/install.sh | sh` and then `uv tool install llm` |
+| [`ollama`](https://ollama.com) *(optional)* | only required when `-t/--target` is used for translation | follow the Ollama installation instructions |
 
 > The script hardens `PATH` with common Homebrew locations but otherwise assumes these tools are already installed.
 
@@ -28,7 +28,7 @@ Make sure the following command-line tools are available in your shell `PATH`:
    ```bash
    ./live_yap.sh -s en-US -d ":0"
    ```
-4. For live Japanese → English translation using the bundled MLX model:
+4. For live Japanese → English translation using the local Ollama model:
    ```bash
    ./live_yap.sh -s ja-JP -t en
    ```
@@ -42,11 +42,18 @@ Usage: ./live_yap.sh [-d DEVICE] [-s SOURCE_LOCALE] [-t TARGET_LANG] [-n SEG_SEC
 
 - `-d DEVICE` — audio device identifier passed to `ffmpeg -f avfoundation`; defaults to `:0` (macOS default input). Use the list command above to discover device IDs.
 - `-s SOURCE_LOCALE` — locale Yap should transcribe (e.g. `en-US`, `es-ES`, `ja-JP`). This flag is required when you want meaningful results.
-- `-t TARGET_LANG` — ISO language code for translation. When set, each transcription is piped through `uvx llm -m mlx-community/Llama-3.2-1B-Instruct-4bit`. If translation fails, the script falls back to the raw transcription.
+- `-t TARGET_LANG` — ISO language code for translation. When set, transcriptions are queued and translated asynchronously in small batches through `ollama run $TRANSLATION_MODEL` (default `llama3.1:8b`). The live window shows the source caption immediately with a pending marker and updates again when the translated line arrives. You can override the model with `TRANSLATION_MODEL`, the batch size with `TRANSLATION_BATCH`, and the idle flush window (seconds) with `TRANSLATION_FLUSH_SECS`. If translation fails, the script falls back to the raw transcription and records the error details.
 - `-n SEG_SECONDS` — length of each recorded chunk in seconds (default `2`). Shorter chunks reduce latency, longer chunks can improve accuracy.
 - `-w WINDOW` — how many recent lines to keep visible in the terminal (default `3`).
 
 To change the built-in defaults (log directory, model name, chunk length, etc.), edit the variable assignments near the top of `live_yap.sh`.
+
+When translation is enabled you can also tweak the asynchronous batching behaviour with environment variables:
+
+- `TRANSLATION_MODEL` — Ollama model to use (default `llama3.1:8b`).
+- `TRANSLATION_BATCH` — number of transcriptions sent per Ollama prompt (default `3`).
+- `TRANSLATION_FLUSH_SECS` — idle seconds before flushing a partial batch (default `1.0`).
+- Translation errors for each session are captured in `logs/yap_live_YYYYMMDD_HHMMSS_errors.log` when translation is enabled.
 
 ## Tips & Troubleshooting
 - **No audio captured:** Double-check the `-d` device ID. On macOS you may need to approve microphone access for your terminal.
