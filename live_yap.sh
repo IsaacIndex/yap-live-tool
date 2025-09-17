@@ -353,15 +353,31 @@ while IFS= read -r -d "" path; do
   fi
   [[ -z "$RAW_TEXT" ]] && continue
 
+  CLEAN_TEXT="$(printf '%s' "$RAW_TEXT" | tr '\r\n' ' ' | sed 's/[[:space:]]\{2,\}/ /g')"
+  if [[ -z "$CLEAN_TEXT" ]]; then
+    continue
+  fi
+  if ! python3 - "$CLEAN_TEXT" <<'PY'; then
+import sys
+import unicodedata
+
+text = sys.argv[1] if len(sys.argv) > 1 else ""
+for ch in text:
+    if ch.strip() and unicodedata.category(ch)[0] in ("L", "N"):
+        sys.exit(0)
+sys.exit(1)
+PY
+    continue
+  fi
+
   if [[ -n "$TARGET_LANG" ]]; then
-    RAW_TEXT="$(printf '%s' "$RAW_TEXT" | tr '\r\n' ' ' | sed 's/[[:space:]]\{2,\}/ /g')"
     ((chunk_seq++))
-    src_display="[${SOURCE_LOCALE}] $RAW_TEXT (→ ${TARGET_LANG} pending)"
+    src_display="[${SOURCE_LOCALE}] $CLEAN_TEXT (→ ${TARGET_LANG} pending)"
     ROLL+=("$src_display")
     printf '%s\n' "$src_display" >> "$LOG_FILE"
     render_window
     if [[ -n "$TRANSLATE_IN" ]]; then
-      if ! printf '%s\t%s\n' "$chunk_seq" "$RAW_TEXT" >&"$TRANSLATE_IN" 2>/dev/null; then
+      if ! printf '%s\t%s\n' "$chunk_seq" "$CLEAN_TEXT" >&"$TRANSLATE_IN" 2>/dev/null; then
         log_error "translation pipeline unavailable, falling back to raw transcript"
         TRANSLATION_WARNED=1
         collect_translations
@@ -403,9 +419,8 @@ while IFS= read -r -d "" path; do
     fi
     collect_translations
   else
-    OUT_TEXT="$(printf '%s' "$RAW_TEXT" | tr '\r\n' ' ' | sed 's/[[:space:]]\{2,\}/ /g')"
-    ROLL+=("$OUT_TEXT")
-    printf '%s\n' "$OUT_TEXT" >> "$LOG_FILE"
+    ROLL+=("$CLEAN_TEXT")
+    printf '%s\n' "$CLEAN_TEXT" >> "$LOG_FILE"
     render_window
   fi
 done < <(fswatch -0 "$CHUNK_DIR")
