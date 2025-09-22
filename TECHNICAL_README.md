@@ -22,7 +22,7 @@ This document explains how `live_yap.sh` captures, transcribes, and optionally t
 ## Audio Chunking Strategy
 
 - `ffmpeg` is launched once with `-f avfoundation` (macOS-specific) and `-f segment -segment_time SEG_SECONDS`, keeping latency low without reinitializing hardware.
-- A fractional `msleep` helper wraps `/bin/sleep`, Perl, and Python fallbacks because macOS' BSD `sleep` rejects sub-second arguments in some environments. The Python path now receives the requested delay explicitly so that falling back continues to sleep instead of aborting when `/bin/sleep` is unavailable.
+- A fractional `msleep` helper wraps `/bin/sleep` and a Perl-based fallback because macOS' BSD `sleep` rejects sub-second arguments in some environments. Eliminating the Python escape hatch keeps the timing logic within POSIX tooling while still yielding the CPU briefly when both paths are unavailable.
 - `fswatch -0` streams null-delimited filenames so paths containing spaces are handled correctly.
 
 ### Technical Challenge: Low-Latency Capture Without Busy Waiting
@@ -33,7 +33,7 @@ The script must react to new audio segments in under a few hundred milliseconds,
 
 - Each `.wav` chunk is passed to `yap transcribe --locale SOURCE_LOCALE` and stripped of NUL bytes, leading/trailing whitespace, and repeated spaces.
 - Chunks that fail transcription simply continue the loop rather than aborting the session, despite `set -e`, to avoid terminating long recordings because of transient errors.
-- A short Python `unicodedata` probe ensures that the cleaned text contains letters or numbers before displaying it. This filters out silence or punctuation-only artifacts, keeping the transcript readable.
+- A lightweight Bash regex filter ensures that the cleaned text contains letters, numbers, or other visible symbols before displaying it. This filters out silence or punctuation-only artifacts, keeping the transcript readable.
 
 ### Technical Challenge: Balancing Accuracy and Resilience
 
@@ -83,5 +83,5 @@ Because `ffmpeg`, background translators, and FIFOs are active simultaneously, s
 - **Portable timing** is achieved through the layered `msleep` helper instead of assuming GNU `sleep` semantics.
 - **Asynchronous translation** preserves UI responsiveness by decoupling Ollama latency from the transcription loop.
 - **Robust cleanup** avoids resource leaks and ensures logs, FIFOs, and cursors return to a sane state after interruption.
-- **Noise filtering** with Unicode-aware checks keeps transcripts readable by suppressing filler segments.
+- **Noise filtering** with Bash regex checks keeps transcripts readable by suppressing filler segments.
 - **Ring-buffer rendering** provides a lightweight terminal UI without external dependencies.

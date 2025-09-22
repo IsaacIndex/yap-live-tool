@@ -50,15 +50,13 @@ if [[ -n "$TARGET_LANG" ]]; then
   need ollama
 fi
 
-# fractional sleep that works even if 'sleep 0.05' isn't supported
+# fractional sleep helper that never shells out to python
+# tries native sleep, falls back to perl's select, and finally yields the CPU briefly
 msleep() {
   local s="${1:-0.05}"
   /bin/sleep "$s" 2>/dev/null && return 0
   perl -e 'select(undef,undef,undef,$ARGV[0])' "$s" 2>/dev/null && return 0
-  python - "$s" 2>/dev/null <<'PY' || /bin/sleep 0
-import time,sys
-time.sleep(float(sys.argv[1] if len(sys.argv)>1 else "0.05"))
-PY
+  /bin/sleep 0
 }
 
 mkdir -p "$CHUNK_DIR" "$LOG_DIR"
@@ -235,16 +233,8 @@ while IFS= read -r -d "" path; do
   if [[ -z "$CLEAN_TEXT" ]]; then
     continue
   fi
-  if ! python3 - "$CLEAN_TEXT" <<'PY'; then
-import sys
-import unicodedata
-
-text = sys.argv[1] if len(sys.argv) > 1 else ""
-for ch in text:
-    if ch.strip() and unicodedata.category(ch)[0] in ("L", "N"):
-        sys.exit(0)
-sys.exit(1)
-PY
+  # Skip noise-only chunks that contain no letters, numbers, or other visible symbols
+  if [[ ! "$CLEAN_TEXT" =~ [[:alnum:]] ]] && [[ ! "$CLEAN_TEXT" =~ [^[:space:][:punct:]] ]]; then
     continue
   fi
 
