@@ -53,12 +53,76 @@ fi
 # fractional sleep that works even if 'sleep 0.05' isn't supported
 msleep() {
   local s="${1:-0.05}"
+  # Try the platform sleep first; GNU coreutils supports fractional arguments.
   /bin/sleep "$s" 2>/dev/null && return 0
-  perl -e 'select(undef,undef,undef,$ARGV[0])' "$s" 2>/dev/null && return 0
-  python - "$s" 2>/dev/null <<'PY' || /bin/sleep 0
-import time,sys
-time.sleep(float(sys.argv[1] if len(sys.argv)>1 else "0.05"))
-PY
+  # Perl is ubiquitous on macOS and provides sub-second sleeping via select().
+  if command -v perl >/dev/null 2>&1; then
+    perl -e 'select(undef,undef,undef,$ARGV[0])' "$s" 2>/dev/null && return 0
+  fi
+
+  # Normalise values like ".05" so later parsing sees an explicit leading zero.
+  local normalized="$s"
+  [[ "$normalized" == .* ]] && normalized="0$normalized"
+
+  # Split the request into whole- and fractional-second components using Bash regex.
+  local whole="0" frac=""
+  if [[ "$normalized" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+    whole="${BASH_REMATCH[1]}"
+    frac="${BASH_REMATCH[2]}"
+  elif [[ "$normalized" =~ ^([0-9]+)$ ]]; then
+    whole="${BASH_REMATCH[1]}"
+    frac=""
+  fi
+
+  # Always honour the whole-second portion, even on implementations lacking fractions.
+  if [[ "$whole" -gt 0 ]]; then
+    /bin/sleep "$whole" 2>/dev/null || true
+  fi
+
+  # Convert the fractional portion into microseconds for usleep-style helpers.
+  if [[ -n "$frac" ]]; then
+    local padded="${frac}000000"
+    local usec_str="${padded:0:6}"
+    local usec=$((10#$usec_str))
+    if (( usec > 0 )); then
+      if command -v usleep >/dev/null 2>&1; then
+        usleep "$usec" 2>/dev/null && return 0
+      fi
+      # Last resort: fall back to a zero-second sleep to yield the scheduler.
+      /bin/sleep 0
+      return 0
+    fi
+  fi
+
+  # If no fractional component exists just finish after the whole-second sleep.
+  /bin/sleep 0
+}
+
+# Determine whether a string carries meaningful transcription content.
+has_meaningful_text() {
+  local text="$1"
+  local trimmed
+
+  # Trim surrounding whitespace that may have been reintroduced by cleanup filters.
+  trimmed="$(printf '%s' "$text" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  [[ -z "$trimmed" ]] && return 1
+
+  # ASCII alphanumeric characters clearly carry signal (e.g., English letters and digits).
+  if [[ "$trimmed" =~ [[:alnum:]] ]]; then
+    return 0
+  fi
+
+  # Non-ASCII bytes correspond to Unicode glyphs (CJK, emoji, etc.), so keep them.
+  if printf '%s' "$trimmed" | LC_ALL=C grep -q '[^[:ascii:]]'; then
+    return 0
+  fi
+
+  # Allow any other printable symbol that is not pure punctuation (e.g., math operators).
+  if printf '%s' "$trimmed" | LC_ALL=C grep -q '[^[:space:][:punct:]]'; then
+    return 0
+  fi
+
+  return 1
 }
 
 mkdir -p "$CHUNK_DIR" "$LOG_DIR"
@@ -235,16 +299,8 @@ while IFS= read -r -d "" path; do
   if [[ -z "$CLEAN_TEXT" ]]; then
     continue
   fi
-  if ! python3 - "$CLEAN_TEXT" <<'PY'; then
-import sys
-import unicodedata
-
-text = sys.argv[1] if len(sys.argv) > 1 else ""
-for ch in text:
-    if ch.strip() and unicodedata.category(ch)[0] in ("L", "N"):
-        sys.exit(0)
-sys.exit(1)
-PY
+  # Skip chunks that are only silence or punctuation; Bash checks cover ASCII and Unicode.
+  if ! has_meaningful_text "$CLEAN_TEXT"; then
     continue
   fi
 
