@@ -4,6 +4,11 @@
 - `live_yap.sh`: primary Bash script orchestrating capture, transcription, and optional Ollama-based translation.
 - `logs/`: timestamped transcript archives and translation error logs generated per run.
 - `README.md`: usage overview and dependency checklist.
+- `TECHNICAL_README.md`: authoritative log of implementation details and rationale—update it whenever pipeline logic or behavior changes.
+
+## Documentation Requirements
+- Any logic or behavioral change to `live_yap.sh` (or related scripts you add) **must** be reflected in `TECHNICAL_README.md` so the deep-dive stays aligned with the implementation.
+- Record new assumptions, dependencies, or non-obvious control flow in that technical readme alongside user-facing updates in `README.md` when applicable.
 
 ## Build, Test, and Development Commands
 - `./live_yap.sh -s en-US -d ":0"`: run a microphone transcription session; add `-t <lang>` to enable live translation.

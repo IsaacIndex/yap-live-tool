@@ -64,3 +64,7 @@ Each run writes a full transcript to `logs/yap_live_YYYYMMDD_HHMMSS.log`. You ca
 
 ## Contributing
 Issues and pull requests are welcome. If you add flags or change defaults in `live_yap.sh`, please update this README to keep the documentation in sync.
+
+## Technical Deep Dive
+
+See [TECHNICAL_README.md](TECHNICAL_README.md) for a walkthrough of the Bash pipeline design, the macOS-specific challenges it addresses, and how translation is kept responsive without blocking transcription.
