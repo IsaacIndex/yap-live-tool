@@ -22,7 +22,7 @@ This document explains how `live_yap.sh` captures, transcribes, and optionally t
 ## Audio Chunking Strategy
 
 - `ffmpeg` is launched once with `-f avfoundation` (macOS-specific) and `-f segment -segment_time SEG_SECONDS`, keeping latency low without reinitializing hardware.
-- A fractional `msleep` helper wraps `/bin/sleep`, Perl, and Python fallbacks because macOS' BSD `sleep` rejects sub-second arguments in some environments. This avoids busy-wait loops while still polling for new files quickly.
+- A fractional `msleep` helper wraps `/bin/sleep`, Perl, and Python fallbacks because macOS' BSD `sleep` rejects sub-second arguments in some environments. The Python path now receives the requested delay explicitly so that falling back continues to sleep instead of aborting when `/bin/sleep` is unavailable.
 - `fswatch -0` streams null-delimited filenames so paths containing spaces are handled correctly.
 
 ### Technical Challenge: Low-Latency Capture Without Busy Waiting

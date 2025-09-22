@@ -55,11 +55,10 @@ msleep() {
   local s="${1:-0.05}"
   /bin/sleep "$s" 2>/dev/null && return 0
   perl -e 'select(undef,undef,undef,$ARGV[0])' "$s" 2>/dev/null && return 0
-  python - <<PY 2>/dev/null || /bin/sleep 0
+  python - "$s" 2>/dev/null <<'PY' || /bin/sleep 0
 import time,sys
 time.sleep(float(sys.argv[1] if len(sys.argv)>1 else "0.05"))
 PY
-"$s"
 }
 
 mkdir -p "$CHUNK_DIR" "$LOG_DIR"
