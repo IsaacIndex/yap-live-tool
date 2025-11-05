@@ -7,7 +7,7 @@ set -euo pipefail
 # handles prompts asynchronously.
 
 LLAMA_CPP_BIN=${LLAMA_CPP_BIN:-llama-cli}
-LLAMA_CPP_MODEL=${LLAMA_CPP_MODEL:-}
+LLAMA_CPP_MODEL=${LLAMA_CPP_MODEL:-"./models/llama-2-7b.Q4_K_M.gguf"}
 LLAMA_CPP_EXTRA_ARGS=()
 if [[ -n "${LLAMA_CPP_ARGS:-}" ]]; then
   # shellcheck disable=SC2206 # word-splitting desired for custom args
